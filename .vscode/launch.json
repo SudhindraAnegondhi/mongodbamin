@@ -15,10 +15,9 @@
         "123456#aA",
          "--serverHome",
         "/home/sudhindra/projects/spincent/mongoserver",
-        "--import",
-        "../spinserver/backup/customers.json", 
+       "-l"
       ],
-      "console": "terminal"
+      
     }
   ]
 }

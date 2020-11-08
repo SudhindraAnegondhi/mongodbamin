@@ -25,33 +25,10 @@ Future<void> import(
   int documentsSaved = 0;
   String record = '';
   bool checkedSchema = false;
-  /*
-  final response = await http.post('$url/auth/token',
-      body: json.encode(
-        {
-          'username': username,
-          'password': password,
-        },
-      ));
-  if (response.statusCode != 200) {
-    print('Auth failed: ' + response.body);
-    exit(0);
-  }
-  final auth = json.decode(response.body);
-  final headers = {
-    'content-type': 'application/json',
-    'Authorization': 'Bearer ${auth['token']}',
-  };
-  */
+
   final MongoDbClient db = MongoDbClient();
- 
+
   if (!register) {
-    /*
-    final response = await http.post(
-      'http://localhost:8888/allow/${camelCaseFirstLower(basename)}',
-      headers: headers,
-    );
-    */
     final response = await db.allowModel(camelCaseFirstLower(model));
     if (response.statusCode != HttpStatus.ok) {
       print('Allow failed: ${response.body} ');

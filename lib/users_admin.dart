@@ -59,7 +59,7 @@ Future<void> usersAdmin(
       results['user'], results['password'], AuthAction.signInWithPassword);
   Map<String, dynamic> authUser;
   if (response.status == 200) {
-    authUser = Map<String, dynamic>.from(json.decode(response.body)['user']);
+    authUser = response.body['user'];
   }
   List<String> parts;
   Map<String, dynamic> existingDocument;
@@ -72,14 +72,14 @@ Future<void> usersAdmin(
   if (action == Action.addAdmin ||
       action == Action.deleteAdmin ||
       action == Action.modifyAdmin) {
-    parts = results.command[describeEnum(action)]?.split(':');
+    parts = results[describeEnum(action)]?.split(':');
     if (parts == null) {
       print('Username is required');
       return;
     }
     username = parts[0].toString() ?? '';
 
-    if (username == authUser[results['username']] &&
+    if (username == authUser[results['user']] &&
         action != Action.changePassword) {
       print('An admin may not make changes to their own account');
       return;
@@ -93,96 +93,95 @@ Future<void> usersAdmin(
     final response = await db.findOne('user', 'username', username);
     existingDocument =
         response.status == 200 ? json.decode(response.body) : null;
+  }
+  switch (action) {
+    case Action.addAdmin:
+      if (existingDocument != null) {
+        print('$username exists!');
+        return;
+      }
+      if (username != null &&
+          !RegExp(r'^[a-zA-Z\._\-0-9]+@[a-zA-Z\._\-0-9]+\.[a-zA-Z]{2,3}$')
+              .hasMatch(username)) {
+        print('Username must be an email address');
+        return;
+      }
 
-    switch (action) {
-      case Action.addAdmin:
-        if (existingDocument != null) {
-          print('$username exists!');
-          return;
-        }
-        if (username != null &&
-            !RegExp(r'^[a-zA-Z\._\-0-9]+@[a-zA-Z\._\-0-9]+\.[a-zA-Z]{2,3}$')
-                .hasMatch(username)) {
-          print('Username must be an email address');
-          return;
-        }
+      final password = generatePassword(true, true, true, true, 8);
+      final userMap = newUser(
+        username,
+        password,
+        true,
+        roles: roles,
+      );
 
-        final password = generatePassword(true, true, true, true, 8);
-        final userMap = newUser(
-          username,
-          password,
-          true,
-          roles: roles,
-        );
+      final response = await db.save('user', userMap);
 
-        final response = await db.save('user', userMap);
-
+      if (response.status == 200) {
+        generateEmail(username, password, roles);
+      } else {
+        print('Error: $username not added');
+      }
+      break;
+    case Action.changePassword:
+      final password = results.command[describeEnum(action)];
+      if (password == null) {
+        print('New password is required');
+        return;
+      }
+      final userMap = authUser;
+      userMap['hashedPassword'] = generatePasswordHash(
+        password,
+        authUser['salt'],
+      );
+      final response = await db.save('user', userMap);
+      if (response.status == 200) {
+        print('---> Ok - password changed.');
+      } else {
+        print('---> Error - password not changed.');
+      }
+      break;
+    case Action.deleteAdmin:
+      if (authUser['roles'].contains(Role.userAdmin) ||
+          authUser['roles'].contains(Role.all)) {
+        final response = await db.remove('user', {'username': username});
+        //await database.collection('user').remove({'username': username});
         if (response.status == 200) {
-          generateEmail(username, password, roles);
+          print('---> Ok - Admin deleted.');
         } else {
-          print('Error: $username not added');
+          print('---> Error - Admin not deleted.');
         }
-        break;
-      case Action.changePassword:
-        final password = results.command[describeEnum(action)];
-        if (password == null) {
-          print('New password is required');
-          return;
-        }
-        final userMap = authUser;
-        userMap['hashedPassword'] = generatePasswordHash(
-          password,
-          authUser['salt'],
-        );
-        final response = await db.save('user', userMap);
+      } else {
+        print('---> Error - not authorized.');
+      }
+      break;
+    case Action.listAdmin:
+      await adminList(db);
+      break;
+
+    case Action.modifyAdmin:
+      try {
+        final userRecord = json.decode(results['updateAdmin']);
+        // only admin, firstName, lastName allowed to be changed
+        ['isAdmin', 'firstName', 'lastName'].forEach((key) {
+          existingDocument[key] = userRecord[key] ?? existingDocument[key];
+        });
+        final user = User.fromMap(existingDocument);
+        user.roles = roles;
+        final response = await db.save('user', user.toMap());
         if (response.status == 200) {
-          print('---> Ok - password changed.');
+          print('---> Ok - User updated.');
         } else {
-          print('---> Error - password not changed.');
+          print('---> Error - User not changed.');
         }
-        break;
-      case Action.deleteAdmin:
-        if (authUser['roles'].contains(Role.userAdmin) ||
-            authUser['roles'].contains(Role.all)) {
-          final response = await db.remove('user', {'username': username});
-          //await database.collection('user').remove({'username': username});
-          if (response.status == 200) {
-            print('---> Ok - Admin deleted.');
-          } else {
-            print('---> Error - Admin not deleted.');
-          }
-        } else {
-          print('---> Error - not authorized.');
-        }
-        break;
-      case Action.listAdmin:
-        await adminList(db);
-        break;
-     
-      case Action.modifyAdmin:
-        try {
-          final userRecord = json.decode(results['updateAdmin']);
-          // only admin, firstName, lastName allowed to be changed
-          ['isAdmin', 'firstName', 'lastName'].forEach((key) {
-            existingDocument[key] = userRecord[key] ?? existingDocument[key];
-          });
-          final user = User.fromMap(existingDocument);
-          user.roles = roles;
-          final response = await db.save('user', user.toMap());
-          if (response.status == 200) {
-            print('---> Ok - User updated.');
-          } else {
-            print('---> Error - User not changed.');
-          }
-        } catch (e) {
-          print('---> Error ' + e.toString());
-        }
-        break;
-    }
-    /*
+      } catch (e) {
+        print('---> Error ' + e.toString());
+      }
+      break;
+  }
+  /*
   } catch (e) {
     print('Error: ${e.toString()}');
   }
   */
-  }
 }
